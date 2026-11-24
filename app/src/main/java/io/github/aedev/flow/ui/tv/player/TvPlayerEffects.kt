@@ -1,0 +1,163 @@
+package io.github.aedev.flow.ui.tv.player
+
+import android.os.SystemClock
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import io.github.aedev.flow.ui.screens.player.VideoPlayerViewModel
+import io.github.aedev.flow.ui.screens.player.state.PlayerScreenState
+import io.github.aedev.flow.ui.screens.player.state.PlayerSheet
+import io.github.aedev.flow.ui.tv.player.state.TvOverlayMode
+import io.github.aedev.flow.ui.tv.player.state.TvOverlayState
+import io.github.aedev.flow.ui.tv.player.state.TvPlayerOverlayController
+import io.github.aedev.flow.ui.tv.player.state.TvScrubController
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+
+internal enum class TvPlayerFocusTarget { PLAY_PAUSE, SEEK_BAR, UP_NEXT }
+
+/** Hides the controls once the remote has been idle for the controller's delay; restarts on every press. */
+@Composable
+internal fun TvOverlayAutoHideEffect(
+    overlayController: TvPlayerOverlayController,
+    overlayState: TvOverlayState,
+    isPlaying: Boolean,
+    isScrubbing: Boolean,
+) {
+    LaunchedEffect(overlayState.mode, overlayState.lastInteractionAtMs, isPlaying, isScrubbing) {
+        val deadline = overlayController.autoHideDeadline(isPlaying = isPlaying, isScrubbing = isScrubbing) ?: return@LaunchedEffect
+        val waitMs = deadline - SystemClock.uptimeMillis()
+        if (waitMs > 0) delay(waitMs)
+        overlayController.hide()
+    }
+}
+
+/**
+ * Puts focus where the overlay mode calls for: [hiddenTarget] while the controls are hidden (the player
+ * itself, so the D-pad reaches playback, or a load error's buttons), and [transportTarget] as they
+ * appear. A panel moves focus on its own.
+ */
+@Composable
+internal fun TvOverlayFocusEffect(
+    mode: TvOverlayMode,
+    hiddenTarget: () -> FocusRequester,
+    transportTarget: () -> FocusRequester,
+    onHidden: () -> Unit,
+) {
+    LaunchedEffect(mode) {
+        when (mode) {
+            TvOverlayMode.HIDDEN -> {
+                onHidden()
+                hiddenTarget().requestFocus()
+            }
+
+            TvOverlayMode.TRANSPORT -> {
+                transportTarget().requestFocus()
+            }
+
+            // The seek bar alone leaves focus on the player, so the D-pad keeps seeking.
+            TvOverlayMode.SEEK, TvOverlayMode.PANEL -> {
+                Unit
+            }
+        }
+    }
+}
+
+/**
+ * Comments load once per video, the first time their panel opens; live chat polls only while its panel
+ * shows and the player is resumed, as on the phone.
+ */
+@Composable
+internal fun TvPlayerSheetEffects(
+    videoId: String,
+    screenState: PlayerScreenState,
+    viewModel: VideoPlayerViewModel,
+    commentsEnabled: Boolean,
+) {
+    var commentsLoadedFor by remember { mutableStateOf<String?>(null) }
+    val commentsOpen = screenState.activeSheet is PlayerSheet.Comments
+    LaunchedEffect(videoId, commentsOpen) {
+        if (!commentsOpen || !commentsEnabled || commentsLoadedFor == videoId) return@LaunchedEffect
+        commentsLoadedFor = videoId
+        viewModel.loadComments(videoId)
+    }
+
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(viewModel, lifecycle) {
+        combine(lifecycle.currentStateFlow, snapshotFlow { screenState.activeSheet is PlayerSheet.LiveChat }) { state, shown ->
+            shown && state.isAtLeast(Lifecycle.State.RESUMED)
+        }.collect(viewModel::setLiveChatPanelVisible)
+    }
+}
+
+internal class TvPlayerFocusRequesters(
+    val root: FocusRequester,
+    val upNext: FocusRequester,
+    val countdown: FocusRequester,
+    val error: FocusRequester,
+)
+
+/** Moves the remote's focus to whatever just appeared: a new video, the Up Next row, the countdown or an error. */
+@Composable
+internal fun TvPlayerFocusRequests(
+    videoId: String,
+    upNextShown: Boolean,
+    countdownActive: Boolean,
+    errorShown: Boolean,
+    overlayMode: () -> TvOverlayMode,
+    focus: TvPlayerFocusRequesters,
+    onErrorShown: () -> Unit,
+) {
+    LaunchedEffect(videoId) {
+        focus.root.requestFocus()
+    }
+    LaunchedEffect(upNextShown) {
+        if (upNextShown && overlayMode() == TvOverlayMode.TRANSPORT) focus.upNext.requestFocus()
+    }
+    LaunchedEffect(countdownActive) {
+        if (countdownActive) focus.countdown.requestFocus()
+    }
+    LaunchedEffect(errorShown) {
+        if (errorShown) {
+            onErrorShown()
+            focus.error.requestFocus()
+        } else {
+            focus.root.requestFocus()
+        }
+    }
+}
+
+/** Back cancels a scrub first, then closes an open panel, then hides the controls, and only then leaves. */
+@Composable
+internal fun TvPlayerBackHandler(
+    scrubController: TvScrubController,
+    overlayController: TvPlayerOverlayController,
+    onScrubCancelled: () -> Unit,
+    onClosePanel: () -> Unit,
+    onClose: () -> Unit,
+) {
+    BackHandler {
+        when {
+            scrubController.current.isScrubbing -> {
+                scrubController.cancel()
+                onScrubCancelled()
+            }
+
+            overlayController.state.value.mode == TvOverlayMode.PANEL -> {
+                onClosePanel()
+            }
+
+            !overlayController.onBack() -> {
+                onClose()
+            }
+        }
+    }
+}

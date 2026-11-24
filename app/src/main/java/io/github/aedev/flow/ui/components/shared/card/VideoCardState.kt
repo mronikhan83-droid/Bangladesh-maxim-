@@ -1,0 +1,322 @@
+package io.github.aedev.flow.ui.components.shared.card
+
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.aedev.flow.data.contentfilter.aislist.AiListMatcher
+import io.github.aedev.flow.data.contentfilter.aislist.AiListRepository
+import io.github.aedev.flow.data.local.PlayerPreferences
+import io.github.aedev.flow.data.local.ThumbnailQuality
+import io.github.aedev.flow.data.local.VideoCardStyle
+import io.github.aedev.flow.data.local.WatchProgressStore
+import io.github.aedev.flow.data.local.dao.WatchProgress
+import io.github.aedev.flow.data.local.isImportedWatch
+import io.github.aedev.flow.data.model.Video
+import io.github.aedev.flow.data.model.VideoCollaborator
+import io.github.aedev.flow.data.repository.DeArrowRepository
+import io.github.aedev.flow.data.repository.OriginalTitleRepository
+import io.github.aedev.flow.ui.components.LocalDeArrow
+import io.github.aedev.flow.ui.components.layout.navigation.MediaNavigator
+import io.github.aedev.flow.ui.components.rememberDeArrowLookup
+import io.github.aedev.flow.ui.components.shared.LocalArtworkColors
+import io.github.aedev.flow.ui.components.shared.LocalThumbnailQuality
+import io.github.aedev.flow.ui.components.shared.LocalYouTubeFramesOnly
+import io.github.aedev.flow.ui.components.shared.quickactions.QuickActionsViewModel
+import io.github.aedev.flow.ui.components.shared.quickactions.sharedQuickActionsViewModel
+import io.github.aedev.flow.ui.utils.rememberIsOnWifi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+
+/**
+ * Card settings that are identical for every card on screen.
+ *
+ * Each of these used to be collected per card, so a feed showing ten cards ran fifty DataStore
+ * collectors and re-mapped the same preference file in each of them on every write. They are
+ * collected once at the composition root instead and read through [LocalVideoCardPreferences].
+ */
+@Immutable
+data class VideoCardPreferences(
+    val deArrowEnabled: Boolean = false,
+    val deArrowBadgeEnabled: Boolean = false,
+    val actionsEnabled: Boolean = false,
+    val markWatchedEnabled: Boolean = false,
+    val showWatchProgress: Boolean = true,
+    val originalTitlesEnabled: Boolean = false,
+    val deArrowRandomFrame: Boolean = true,
+    val deArrowThumbnailsOnly: Boolean = false,
+    val cardStyle: VideoCardStyle = VideoCardStyle.ROUNDED,
+)
+
+/**
+ * Static because these change only when the user edits a setting: reads cost nothing, and the
+ * rare write invalidates the subtree wholesale instead of being tracked per reader.
+ */
+val LocalVideoCardPreferences = staticCompositionLocalOf { VideoCardPreferences() }
+
+/**
+ * Watch progress for every video in history, backed by one Room observer.
+ *
+ * Cards used to open a `getVideoHistory(id)` query each. Handing them the map directly would
+ * trade that for the opposite problem — one progress write recomposing every visible card — so
+ * lookups go through [rememberWatchProgress], which derives per-id state.
+ */
+@Stable
+class VideoWatchProgressStore internal constructor(
+    private val entries: State<CardProgressRows>,
+) {
+    internal fun progressFor(videoId: String): Float? = entries.value.let { it.rows[videoId]?.cardProgress(it.countImported) }
+
+    internal companion object {
+        val Empty = VideoWatchProgressStore(mutableStateOf(CardProgressRows()))
+    }
+}
+
+/**
+ * History rows as cards read them; per-card progress is worked out on lookup, so a save costs no
+ * full pass. Compared by identity on purpose: the store emits only real changes, and comparing two
+ * whole-history maps would put that full pass back on the main thread.
+ */
+@Immutable
+internal class CardProgressRows(
+    val rows: Map<String, WatchProgress> = emptyMap(),
+    val countImported: Boolean = false,
+)
+
+val LocalVideoWatchProgress = staticCompositionLocalOf { VideoWatchProgressStore.Empty }
+
+/**
+ * Watch progress for [videoId] as a card renders it, or null when there is nothing to show.
+ *
+ * `derivedStateOf` is what keeps the shared map from becoming a global invalidation: a card is
+ * recomposed only when its own entry changes, not when any video's progress is written.
+ */
+@Composable
+fun rememberWatchProgress(videoId: String): Float? {
+    val store = LocalVideoWatchProgress.current
+    val progress = remember(store, videoId) { derivedStateOf { store.progressFor(videoId) } }
+    return progress.value
+}
+
+internal const val WATCHED_PROGRESS_THRESHOLD = 0.90f
+
+/**
+ * Whether a card should read as watched. Marking a video watched writes a history entry at its full
+ * length, so the progress store is the one answer for every screen.
+ */
+internal fun isWatchedProgress(watchProgress: Float?): Boolean = (watchProgress ?: 0f) >= WATCHED_PROGRESS_THRESHOLD
+
+/** The feedback a card sends without opening its sheet. */
+@Stable
+class VideoCardActions(
+    val onInterested: (Video) -> Unit,
+    val onNotInterested: (Video) -> Unit,
+    val onWatched: (Video) -> Unit,
+) {
+    internal companion object {
+        val None = VideoCardActions({}, {}, {})
+    }
+}
+
+val LocalVideoCardActions = staticCompositionLocalOf { VideoCardActions.None }
+
+/**
+ * Installs the shared card state. Must wrap any tree that renders video cards; without it cards
+ * fall back to defaults (settings off, no progress bars, actions that do nothing). Installed once at
+ * the activity root, so [quickActions] is the activity's instance and no card looks one up itself.
+ */
+@Composable
+fun ProvideVideoCardState(
+    originalTitles: OriginalTitleRepository?,
+    deArrow: DeArrowRepository?,
+    aiList: AiListRepository? = null,
+    watchProgress: WatchProgressStore,
+    quickActions: QuickActionsViewModel = sharedQuickActionsViewModel(),
+    content: @Composable () -> Unit,
+) {
+    val context = LocalContext.current
+    val actions =
+        remember(quickActions) {
+            VideoCardActions(
+                onInterested = quickActions::markAsInteresting,
+                onNotInterested = quickActions::markNotInterested,
+                onWatched = quickActions::markAsWatched,
+            )
+        }
+
+    val playerPreferences = remember(context) { PlayerPreferences(context) }
+    val preferencesFlow =
+        remember(playerPreferences) {
+            combine(
+                playerPreferences.deArrowEnabled,
+                playerPreferences.deArrowBadgeEnabled,
+                playerPreferences.videoCardActionsEnabled,
+                playerPreferences.videoCardMarkWatchedEnabled,
+            ) { deArrow, deArrowBadge, actions, markWatched ->
+                VideoCardPreferences(deArrow, deArrowBadge, actions, markWatched)
+            }.combine(playerPreferences.showWatchProgress) { cardPreferences, showWatchProgress ->
+                cardPreferences.copy(showWatchProgress = showWatchProgress)
+            }.combine(playerPreferences.originalTitles) { cardPreferences, originalTitles ->
+                cardPreferences.copy(originalTitlesEnabled = originalTitles)
+            }.combine(playerPreferences.deArrowRandomFrame) { cardPreferences, randomFrame ->
+                cardPreferences.copy(deArrowRandomFrame = randomFrame)
+            }.combine(playerPreferences.deArrowThumbnailsOnly) { cardPreferences, thumbnailsOnly ->
+                cardPreferences.copy(deArrowThumbnailsOnly = thumbnailsOnly)
+            }.combine(playerPreferences.videoCardStyle) { cardPreferences, cardStyle ->
+                cardPreferences.copy(cardStyle = cardStyle)
+            }.distinctUntilChanged()
+        }
+    val preferences by preferencesFlow.collectAsStateWithLifecycle(VideoCardPreferences())
+
+    val thumbnailQualitiesFlow =
+        remember(playerPreferences) {
+            playerPreferences.thumbnailQualityWifi
+                .combine(playerPreferences.thumbnailQualityCellular, ::Pair)
+                .distinctUntilChanged()
+        }
+    val thumbnailQualities by thumbnailQualitiesFlow.collectAsStateWithLifecycle(null)
+    val isWifi = rememberIsOnWifi()
+    val thumbnailQuality = thumbnailQualities?.let { (wifi, cellular) -> ThumbnailQuality.effective(isWifi, wifi, cellular) }
+    val artworkColors by playerPreferences.videoArtworkColors.collectAsStateWithLifecycle(true)
+    val aiMatcherFlow = remember(aiList) { aiList?.matcher ?: MutableStateFlow(AiListMatcher.NONE) }
+    val aiMatcher = aiMatcherFlow.collectAsStateWithLifecycle()
+    val aiLookup = remember(aiMatcher) { AiListLookup(aiMatcher) }
+    val reminderIdsFlow = remember(playerPreferences) { playerPreferences.upcomingVideoReminderIds.distinctUntilChanged() }
+    val reminderIds = reminderIdsFlow.collectAsStateWithLifecycle(emptySet())
+    val reminders = remember(reminderIds) { UpcomingReminders(reminderIds) }
+
+    val progressFlow =
+        remember(watchProgress, playerPreferences) {
+            watchProgress.entries.combine(playerPreferences.countImportedAsWatched.distinctUntilChanged(), ::CardProgressRows)
+        }
+    val progressEntries = progressFlow.collectAsStateWithLifecycle(CardProgressRows())
+    val progressStore = remember(progressEntries) { VideoWatchProgressStore(progressEntries) }
+
+    CompositionLocalProvider(
+        LocalVideoCardPreferences provides preferences,
+        LocalVideoWatchProgress provides progressStore,
+        LocalVideoCardActions provides actions,
+        LocalThumbnailQuality provides thumbnailQuality,
+        LocalYouTubeFramesOnly provides (preferences.deArrowEnabled && preferences.deArrowThumbnailsOnly),
+        LocalArtworkColors provides artworkColors,
+        LocalOriginalTitles provides originalTitles,
+        LocalDeArrow provides deArrow,
+        LocalAiListMatcher provides aiLookup,
+        LocalUpcomingReminders provides reminders,
+        content = content,
+    )
+}
+
+/**
+ * Below 3% a video counts as not started (null), and at 90% the bar is filled rather than left a
+ * sliver short of the end. With [countImported], a video from a YouTube history import fills the bar
+ * too; music and local files never do.
+ */
+internal fun WatchProgress.cardProgress(countImported: Boolean = false): Float? {
+    if (countImported && !isMusic && !isLocal && isImportedWatch(position, duration)) return 1f
+    if (duration <= 0) return null
+    val percentage = position.toFloat() / duration.toFloat() * 100f
+    return when {
+        percentage >= 90f -> 1f
+        percentage >= 3f -> percentage / 100f
+        else -> null
+    }
+}
+
+/** Which of a card's sheets is open. Kept apart from [VideoCardState] so a new title or progress value never closes one. */
+@Stable
+internal class VideoCardSheetState {
+    var showQuickActions by mutableStateOf(false)
+    var showCollaborators by mutableStateOf(false)
+}
+
+/**
+ * Everything a card shows about [video], resolved once for every card layout. A value with
+ * structural equality, rebuilt only when an input changes, so the thumbnail, side actions and
+ * sheets skip when the card recomposes for anything else.
+ */
+@Immutable
+internal data class VideoCardState(
+    val video: Video,
+    val title: String,
+    val thumbnailUrl: String?,
+    val deArrowTitle: Boolean,
+    val deArrowFrameUrl: String?,
+    val youTubeFrames: Boolean,
+    val deArrowBadgeEnabled: Boolean,
+    val channelName: String,
+    val collaborators: List<VideoCollaborator>,
+    val watchProgress: Float?,
+    val showReminderBadge: Boolean,
+    val sheets: VideoCardSheetState,
+) {
+    val avatarUrls: List<String> = video.channelAvatarUrls(collaborators)
+
+    val isWatched: Boolean get() = isWatchedProgress(watchProgress)
+
+    /** A collaboration opens the list of its channels; a single channel opens directly. */
+    fun openChannel(navigator: MediaNavigator) {
+        if (collaborators.size > 1) {
+            sheets.showCollaborators = true
+        } else {
+            navigator.openChannel(video.channelId)
+        }
+    }
+}
+
+@Composable
+internal fun rememberVideoCardState(video: Video): VideoCardState {
+    val preferences = LocalVideoCardPreferences.current
+    val thumbnailsOnly = preferences.deArrowEnabled && preferences.deArrowThumbnailsOnly
+    val lookup = rememberDeArrowLookup(video, preferences.deArrowEnabled, preferences.deArrowRandomFrame || thumbnailsOnly)
+    val deArrow = lookup.result
+    val thumbnail = CardThumbnailPolicy.resolve(video, lookup, thumbnailsOnly)
+    val originalTitle = rememberOriginalTitle(video.id, preferences.originalTitlesEnabled && deArrow?.title == null)
+    val collaborators = rememberCollaboratorItems(video)
+    val channelName = rememberCollaboratorChannelDisplayName(video.channelName, collaborators)
+    val watchProgress = rememberWatchProgress(video.id)
+    val sheets = remember { VideoCardSheetState() }
+    val title = deArrow?.title ?: originalTitle ?: video.title
+    val deArrowTitle = deArrow?.title != null
+    val deArrowFrameUrl = deArrow?.thumbnailUrl
+    val showReminderBadge = if (video.isUpcoming) rememberHasReminder(video.id) else false
+    return remember(
+        video,
+        title,
+        thumbnail.url,
+        deArrowTitle,
+        deArrowFrameUrl,
+        thumbnail.youTubeFrames,
+        preferences.deArrowBadgeEnabled,
+        channelName,
+        collaborators,
+        watchProgress,
+        showReminderBadge,
+    ) {
+        VideoCardState(
+            video = video,
+            title = title,
+            thumbnailUrl = thumbnail.url,
+            deArrowTitle = deArrowTitle,
+            deArrowFrameUrl = deArrowFrameUrl,
+            youTubeFrames = thumbnail.youTubeFrames,
+            deArrowBadgeEnabled = preferences.deArrowBadgeEnabled,
+            channelName = channelName,
+            collaborators = collaborators,
+            watchProgress = watchProgress,
+            showReminderBadge = showReminderBadge,
+            sheets = sheets,
+        )
+    }
+}
