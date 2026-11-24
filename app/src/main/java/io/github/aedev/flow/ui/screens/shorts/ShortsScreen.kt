@@ -14,6 +14,8 @@ import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -332,6 +334,24 @@ fun ShortsScreen(
                         onProgressChange = { progress -> sheetInsets.follow(sheetExpandedHeightPx * progress) },
                     ),
             )
+        }
+
+        if (uiState.isOffline && uiState.shorts.isNotEmpty() && !isInPip) {
+            Surface(
+                color = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                shape = MaterialTheme.shapes.small,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = SnackbarBottomPadding),
+            ) {
+                Text(
+                    text = stringResource(R.string.offline_videos_watching),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
         }
 
         ShortsTopBar(

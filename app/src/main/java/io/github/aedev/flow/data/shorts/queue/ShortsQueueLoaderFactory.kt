@@ -1,12 +1,16 @@
 package io.github.aedev.flow.data.shorts.queue
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.data.local.PlaylistRepository
 import io.github.aedev.flow.data.local.SubscriptionRepository
+import io.github.aedev.flow.data.offline.OfflineShortsRepository
 import io.github.aedev.flow.data.recommendation.FlowNeuroEngine
 import io.github.aedev.flow.data.shorts.ShortsFeedRepository
 import io.github.aedev.flow.data.subscriptions.SubscriptionFeedRepository
 import io.github.aedev.flow.data.subscriptions.SubscriptionWatchedVideos
+import io.github.aedev.flow.utils.NetworkState
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,7 +19,9 @@ import javax.inject.Singleton
 class ShortsQueueLoaderFactory
     @Inject
     constructor(
+        @ApplicationContext private val context: Context,
         private val shortsRepository: ShortsFeedRepository,
+        private val offlineShorts: OfflineShortsRepository,
         private val playlistRepository: PlaylistRepository,
         private val subscriptionFeedRepository: SubscriptionFeedRepository,
         private val subscriptionRepository: SubscriptionRepository,
@@ -74,7 +80,11 @@ class ShortsQueueLoaderFactory
         private fun loaderFor(source: ShortsQueueSource): ShortsQueueLoader =
             when (source) {
                 ShortsQueueSource.Feed -> {
-                    AlgorithmicFeedLoader(shortsRepository)
+                    OfflineFallbackLoader(
+                        online = { NetworkState.isOnline(context) },
+                        offline = OfflineShortsLoader(offlineShorts),
+                        delegate = AlgorithmicFeedLoader(shortsRepository),
+                    )
                 }
 
                 is ShortsQueueSource.SeededFeed -> {

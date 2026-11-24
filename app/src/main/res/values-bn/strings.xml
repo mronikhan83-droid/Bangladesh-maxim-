@@ -9,4 +9,34 @@
     <string name="subscriptions_sort_most_watched">সবচেয়ে বেশি দেখা</string>
     <string name="subscriptions_pin_channel">স্টার্ট মেনুতে পিন করুন</string>
     <string name="subscriptions_unpin_channel">আনপিন করুন</string>
+
+    <!-- Offline videos -->
+    <string name="offline_videos_title">অফলাইন ভিডিও</string>
+    <string name="offline_videos_summary">ইন্টারনেট ছাড়া দেখতে Shorts ডাউনলোড করুন</string>
+    <string name="offline_videos_downloaded">ডাউনলোড হয়েছে</string>
+    <plurals name="offline_videos_count">
+        <item quantity="one">%dটি ভিডিও</item>
+        <item quantity="other">%dটি ভিডিও</item>
+    </plurals>
+    <string name="offline_videos_storage">ডাউনলোড: %1$s</string>
+    <string name="offline_videos_clear">মুছুন</string>
+    <string name="offline_videos_clear_title">অফলাইন ভিডিও মুছবেন?</string>
+    <string name="offline_videos_clear_message">এই ডিভাইসে ডাউনলোড করা সব Shorts মুছে যাবে।</string>
+    <string name="offline_videos_pick_title">অফলাইনে রাখার ভিডিও</string>
+    <string name="offline_videos_pick_hint">আপনার লাইক করা, সেভ করা ও সবচেয়ে বেশি দেখা Shorts আগে, তারপর আপনার জন্য বাছাই করা Shorts।</string>
+    <string name="offline_videos_download_action">ডাউনলোড</string>
+    <string name="offline_videos_queue">ডাউনলোড সারিতে %1$dটি</string>
+    <plurals name="offline_videos_started">
+        <item quantity="one">%dটি Short ডাউনলোড সারিতে যোগ হয়েছে</item>
+        <item quantity="other">%dটি Shorts ডাউনলোড সারিতে যোগ হয়েছে</item>
+    </plurals>
+    <string name="offline_videos_nothing_needed">এত ভিডিও আপনার অফলাইনে আগেই আছে।</string>
+    <string name="offline_videos_none_found">ডাউনলোডের মতো নতুন Shorts পাওয়া যায়নি।</string>
+    <plurals name="offline_videos_cleared">
+        <item quantity="one">%dটি ভিডিও মুছে গেছে</item>
+        <item quantity="other">%dটি ভিডিও মুছে গেছে</item>
+    </plurals>
+    <string name="offline_videos_watching">আপনি অফলাইন ভিডিও দেখছেন</string>
+    <string name="offline_videos_close">বন্ধ করুন</string>
+    <string name="offline_videos_back">ফিরে যান</string>
 </resources>

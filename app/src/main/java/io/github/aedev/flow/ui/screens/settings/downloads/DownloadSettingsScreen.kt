@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ManageSearch
 import androidx.compose.material.icons.outlined.AudioFile
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FolderSpecial
 import androidx.compose.material.icons.outlined.PermMedia
@@ -108,6 +109,7 @@ internal fun DownloadSettingsScreen(
     var picker by rememberSaveable { mutableStateOf<DownloadPicker?>(null) }
     var locationTarget by rememberSaveable { mutableStateOf<DownloadTarget?>(null) }
     var cacheLimit by rememberSaveable { mutableStateOf<MediaCacheType?>(null) }
+    var showOfflineVideos by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { cacheViewModel.measure() }
     var access by remember { mutableStateOf(StorageAccess.read(context)) }
     LifecycleResumeEffect(Unit) {
@@ -202,6 +204,11 @@ internal fun DownloadSettingsScreen(
             )
             switch(DownloadsIndex.storageCard, viewModel.storageCard, viewModel::setStorageCard)
             switch(DownloadsIndex.confirmDelete, viewModel.confirmDelete, viewModel::setConfirmDelete)
+            nav(
+                DownloadsIndex.offlineVideos,
+                icon = Icons.Outlined.CloudDownload,
+                onClick = { showOfflineVideos = true },
+            )
             info(DownloadsIndex.retag, value = retagValue)
             nav(
                 DownloadsIndex.findEarlier,
@@ -272,6 +279,7 @@ internal fun DownloadSettingsScreen(
             DownloadTarget.MUSIC -> locations?.music
             null -> null
         }
+    if (showOfflineVideos) OfflineVideosSheet(onDismiss = { showOfflineVideos = false })
     cacheLimit?.let { type -> DownloadCacheLimitDialog(type, cacheViewModel, onDismiss = { cacheLimit = null }) }
     if (dialogTarget != null && dialogLocation != null) {
         DownloadLocationDialog(

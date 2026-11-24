@@ -110,6 +110,13 @@ internal object DownloadsIndex {
             R.string.local_section_library,
             summary = R.string.downloads_confirm_delete_summary,
         )
+    val offlineVideos =
+        entry(
+            "offline_videos",
+            R.string.offline_videos_title,
+            R.string.local_section_library,
+            summary = R.string.offline_videos_summary,
+        )
     val retag = entry("retag", R.string.download_retag_title, R.string.local_section_library)
     val findEarlier = entry("find_earlier", R.string.downloads_find_earlier_title, R.string.local_section_library)
     val concurrentDownloads =
@@ -165,6 +172,7 @@ internal object DownloadsIndex {
             confirmDelete,
             retag,
             findEarlier,
+            offlineVideos,
             concurrentDownloads,
             threads,
             allFilesAccess,

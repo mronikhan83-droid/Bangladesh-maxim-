@@ -8,4 +8,6 @@ data class ShortsUiState(
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
     val error: String? = null,
+    /** The queue is the downloaded Shorts because there is no connection. */
+    val isOffline: Boolean = false,
 )

@@ -4,6 +4,7 @@ import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.data.local.PlaylistRepository
 import io.github.aedev.flow.data.model.ShortVideo
 import io.github.aedev.flow.data.model.toShortVideo
+import io.github.aedev.flow.data.offline.OfflineShortsRepository
 import io.github.aedev.flow.data.recommendation.FeedExclusions
 import io.github.aedev.flow.data.shorts.ShortsFeedRepository
 import io.github.aedev.flow.data.shorts.spreadChannels
@@ -56,6 +57,41 @@ class SavedShortsLoader(
     }
 
     override suspend fun more(cursor: String?): ShortsQueuePage = exhaustedPage()
+}
+
+/** The Shorts downloaded to this device, newest first. Finite, and it never reaches for the network. */
+class OfflineShortsLoader(
+    private val offline: OfflineShortsRepository,
+) : ShortsQueueLoader {
+    override suspend fun initial(): ShortsQueuePage = ShortsQueuePage(items = offline.downloadedShorts(), cursor = null, exhausted = true)
+
+    override suspend fun more(cursor: String?): ShortsQueuePage = exhaustedPage()
+}
+
+/**
+ * The algorithmic feed, except with no connection: then the downloaded Shorts, when there are any.
+ * Without any download it falls through to [delegate], so the usual error and retry still show.
+ */
+class OfflineFallbackLoader(
+    private val online: () -> Boolean,
+    private val offline: ShortsQueueLoader,
+    private val delegate: ShortsQueueLoader,
+) : ShortsQueueLoader {
+    private var servedOffline = false
+
+    override suspend fun initial(): ShortsQueuePage {
+        if (!online()) {
+            val local = offline.initial()
+            if (local.items.isNotEmpty()) {
+                servedOffline = true
+                return local
+            }
+        }
+        servedOffline = false
+        return delegate.initial()
+    }
+
+    override suspend fun more(cursor: String?): ShortsQueuePage = if (servedOffline) exhaustedPage() else delegate.more(cursor)
 }
 
 /**

@@ -1,6 +1,7 @@
 package io.github.aedev.flow.ui.screens.shorts
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -36,11 +37,14 @@ import io.github.aedev.flow.data.shorts.queue.ShortsQueueSource
 import io.github.aedev.flow.data.shorts.queue.openAtVideoId
 import io.github.aedev.flow.data.stats.LedgerAction
 import io.github.aedev.flow.data.stats.VideoStatsRecorder
+import io.github.aedev.flow.data.video.VideoDownloadManager
+import io.github.aedev.flow.data.video.storage.DownloadFiles
 import io.github.aedev.flow.innertube.models.response.PlayerResponse
 import io.github.aedev.flow.innertube.pages.VideoCommentSort
 import io.github.aedev.flow.innertube.pages.VideoDescriptionPage
 import io.github.aedev.flow.player.stream.StreamSizeEstimator
 import io.github.aedev.flow.utils.LoadErrorKind
+import io.github.aedev.flow.utils.NetworkState
 import io.github.aedev.flow.utils.PerformanceDispatcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -49,6 +53,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
@@ -67,6 +72,7 @@ class ShortsViewModel
         private val playerPreferences: PlayerPreferences,
         private val videoStats: VideoStatsRecorder,
         private val blockedNames: BlockedChannelNames,
+        private val downloads: VideoDownloadManager,
     ) : ViewModel() {
         private val _uiState = MutableStateFlow(ShortsUiState())
         val uiState: StateFlow<ShortsUiState> = _uiState.asStateFlow()
@@ -171,7 +177,11 @@ class ShortsViewModel
                 viewModelScope.launch(PerformanceDispatcher.networkIO) {
                     try {
                         controller.loadInitial(resolved.openAtVideoId)
-                        _uiState.value = _uiState.value.copy(isLoading = false)
+                        _uiState.value =
+                            _uiState.value.copy(
+                                isLoading = false,
+                                isOffline = !NetworkState.isOnline(context) && controller.items.value.isNotEmpty(),
+                            )
                         publishQueue()
 
                         val items = controller.items.value
@@ -263,9 +273,22 @@ class ShortsViewModel
             targetHeight: Int,
             preferredAudioLanguage: String,
         ): ShortPlaybackStreams? {
+            localStreams(videoId)?.let { return it }
             val resolved = streams.resolve(videoId, targetHeight, preferredAudioLanguage) ?: return null
             resolved.details?.let { enricher.applyDetails(videoId, it) }
             return resolved
+        }
+
+        /** A downloaded Short plays from its file, which also saves the data and works with no connection. */
+        private suspend fun localStreams(videoId: String): ShortPlaybackStreams? {
+            val copy = downloads.findLocalCopy(videoId) ?: return null
+            val path = copy.filePath
+            val uri = if (DownloadFiles.isDocument(path)) path else Uri.fromFile(File(path)).toString()
+            return ShortPlaybackStreams(
+                videoUrl = uri,
+                audioUrl = null,
+                durationMs = copy.video.duration.takeIf { it > 0 }?.let { it * 1_000L },
+            )
         }
 
         suspend fun availableQualities(videoId: String): List<ShortVideoQuality> = streams.availableQualities(videoId)

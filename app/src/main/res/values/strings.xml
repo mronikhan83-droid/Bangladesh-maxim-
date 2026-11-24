@@ -5425,4 +5425,34 @@
     <string name="search_showing_results_for">Showing results for %1$s</string>
     <string name="search_instead_for">Search instead for %1$s</string>
     <string name="search_did_you_mean">Did you mean %1$s</string>
+
+    <!-- Offline videos -->
+    <string name="offline_videos_title">Offline videos</string>
+    <string name="offline_videos_summary">Download Shorts to watch without internet</string>
+    <string name="offline_videos_downloaded">Downloaded</string>
+    <plurals name="offline_videos_count">
+        <item quantity="one">%d video</item>
+        <item quantity="other">%d videos</item>
+    </plurals>
+    <string name="offline_videos_storage">Downloads: %1$s</string>
+    <string name="offline_videos_clear">Clear</string>
+    <string name="offline_videos_clear_title">Clear offline videos?</string>
+    <string name="offline_videos_clear_message">This deletes every Short downloaded to this device.</string>
+    <string name="offline_videos_pick_title">Videos to keep offline</string>
+    <string name="offline_videos_pick_hint">Shorts you liked, saved and watched most come first, then Shorts picked for you.</string>
+    <string name="offline_videos_download_action">Download</string>
+    <string name="offline_videos_queue">%1$d in the download queue</string>
+    <plurals name="offline_videos_started">
+        <item quantity="one">Added %d Short to the download queue</item>
+        <item quantity="other">Added %d Shorts to the download queue</item>
+    </plurals>
+    <string name="offline_videos_nothing_needed">You already have that many offline.</string>
+    <string name="offline_videos_none_found">No new Shorts found to download.</string>
+    <plurals name="offline_videos_cleared">
+        <item quantity="one">Deleted %d video</item>
+        <item quantity="other">Deleted %d videos</item>
+    </plurals>
+    <string name="offline_videos_watching">You\'re watching offline videos</string>
+    <string name="offline_videos_close">Close</string>
+    <string name="offline_videos_back">Back</string>
 </resources>
