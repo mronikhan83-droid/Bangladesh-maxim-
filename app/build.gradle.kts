@@ -334,7 +334,7 @@ dependencies {
     implementation(libs.coil.video)
     implementation(libs.coil.gif)
     implementation(libs.coil.network.okhttp)
-    implementation("androidx.palette:palette-ktx:1.0.0")
+    implementation("androidx.palette:palette-ktx:1.1.0")
 
     // --- Dependency Injection ---
     implementation(libs.hilt.android)
