@@ -4743,7 +4743,6 @@ class PlayerPreferences(
             preferences[DeviceKeys.OFFLINE_KEEP_WATCHED] = enabled
         }
     }
-    }
 
     val defaultDownloadQuality: Flow<VideoQuality> =
         context.devicePreferencesDataStore.data
