@@ -39,4 +39,13 @@
     <string name="offline_videos_watching">আপনি অফলাইন ভিডিও দেখছেন</string>
     <string name="offline_videos_close">বন্ধ করুন</string>
     <string name="offline_videos_back">ফিরে যান</string>
+    <string name="offline_videos_low_storage">যথেষ্ট খালি জায়গা নেই। আগে অন্তত ৫০০ MB খালি করুন।</string>
+    <string name="offline_videos_open_feed">অফলাইন ভিডিও দেখুন</string>
+    <string name="offline_videos_back_to_feed">অনলাইন ফিডে ফিরুন</string>
+    <string name="offline_videos_auto_note">সবগুলো দেখা হয়ে গেলে সেগুলো মুছে যাবে আর নতুন সেট নিজে থেকে ডাউনলোড হবে।</string>
+    <string name="offline_videos_auto_download">অটো-ডাউনলোড</string>
+    <string name="offline_videos_auto_download_hint">সবগুলো দেখা হয়ে গেলে নতুন সেট নিজে থেকে ডাউনলোড হবে।</string>
+    <string name="offline_videos_keep_watched">দেখা ভিডিও রেখে দিন</string>
+    <string name="offline_videos_keep_watched_hint">দেখার পর কিছুই মুছবে না।</string>
+    <string name="offline_videos_private_note">এই ভিডিওগুলো শুধু অ্যাপের ভেতরে থাকে, আপনার Gallery-তে দেখা যায় না।</string>
 </resources>

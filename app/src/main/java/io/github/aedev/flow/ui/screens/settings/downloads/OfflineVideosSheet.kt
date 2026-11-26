@@ -96,6 +96,8 @@ internal fun OfflineVideosSheet(
                         state = state,
                         wifiOnly = wifiOnly,
                         onWifiOnly = viewModel::setWifiOnly,
+                        onAutoDownload = viewModel::setAutoDownload,
+                        onKeepWatched = viewModel::setKeepWatched,
                         onPickCount = { page = OfflinePage.PICKER },
                         onClear = { confirmClear = true },
                         onClose = onDismiss,
@@ -142,6 +144,8 @@ private fun OfflineMain(
     state: OfflineVideosUiState,
     wifiOnly: Boolean,
     onWifiOnly: (Boolean) -> Unit,
+    onAutoDownload: (Boolean) -> Unit,
+    onKeepWatched: (Boolean) -> Unit,
     onPickCount: () -> Unit,
     onClear: () -> Unit,
     onClose: () -> Unit,
@@ -181,6 +185,14 @@ private fun OfflineMain(
         }
     }
 
+    Text(
+        text = stringResource(R.string.offline_videos_private_note),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
+
     if (state.queued > 0) {
         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         Text(
@@ -207,6 +219,18 @@ private fun OfflineMain(
         ListItem(
             headlineContent = { Text(stringResource(R.string.download_over_wifi_only)) },
             trailingContent = { Switch(checked = wifiOnly, onCheckedChange = onWifiOnly) },
+            colors = rowColors,
+        )
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.offline_videos_auto_download)) },
+            supportingContent = { Text(stringResource(R.string.offline_videos_auto_download_hint)) },
+            trailingContent = { Switch(checked = state.autoDownload, onCheckedChange = onAutoDownload) },
+            colors = rowColors,
+        )
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.offline_videos_keep_watched)) },
+            supportingContent = { Text(stringResource(R.string.offline_videos_keep_watched_hint)) },
+            trailingContent = { Switch(checked = state.keepWatched, onCheckedChange = onKeepWatched) },
             colors = rowColors,
         )
         ListItem(
@@ -257,6 +281,11 @@ private fun OfflinePicker(
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    Text(
+        text = stringResource(R.string.offline_videos_auto_note),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     OfflineTargets.forEach { count ->
         Row(
             modifier =
@@ -282,6 +311,7 @@ private fun noticeText(notice: OfflineNotice): String =
         is OfflineNotice.Started -> pluralStringResource(R.plurals.offline_videos_started, notice.count, notice.count)
         OfflineNotice.NothingNeeded -> stringResource(R.string.offline_videos_nothing_needed)
         OfflineNotice.NoCandidates -> stringResource(R.string.offline_videos_none_found)
+        OfflineNotice.LowStorage -> stringResource(R.string.offline_videos_low_storage)
         is OfflineNotice.Cleared -> pluralStringResource(R.plurals.offline_videos_cleared, notice.count, notice.count)
     }
 

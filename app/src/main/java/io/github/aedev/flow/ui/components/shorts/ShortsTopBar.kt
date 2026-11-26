@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +36,9 @@ internal fun ShortsTopBar(
     showBackButton: Boolean,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    offlineVisible: Boolean = false,
+    offlineActive: Boolean = false,
+    onToggleOffline: () -> Unit = {},
 ) {
     if (!visible) return
 
@@ -60,6 +65,18 @@ internal fun ShortsTopBar(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = PlayerScrimContent,
+            )
+        }
+        if (offlineVisible) {
+            PlayerPillIconButton(
+                onClick = onToggleOffline,
+                icon = if (offlineActive) Icons.Rounded.Public else Icons.Rounded.CloudDownload,
+                contentDescription =
+                    stringResource(
+                        if (offlineActive) R.string.offline_videos_back_to_feed else R.string.offline_videos_open_feed,
+                    ),
+                buttonSize = BackButtonSize,
+                iconSize = BackIconSize,
             )
         }
     }

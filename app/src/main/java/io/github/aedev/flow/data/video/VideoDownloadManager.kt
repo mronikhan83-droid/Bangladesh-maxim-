@@ -87,6 +87,7 @@ class VideoDownloadManager
             const val AUDIO_DIR = "Flow"
             private const val STAGING_DIR = "staging"
             private const val INTERNAL_DIR = "downloads"
+            private const val APP_ONLY_DIR = "offline_shorts"
 
             /**
              * Legacy bridge — callers that still use getInstance() will get a crash
@@ -168,6 +169,9 @@ class VideoDownloadManager
 
         /** App-private working space for downloads in progress, never visible to other apps. */
         fun stagingDirectory(): File = File(context.getExternalFilesDir(null) ?: context.filesDir, STAGING_DIR).apply { mkdirs() }
+
+        /** Where Offline videos keeps its Shorts: app-private, so no Gallery or other app ever lists them. */
+        fun appOnlyDirectory(): File = File(context.filesDir, APP_ONLY_DIR).apply { mkdirs() }
 
         /** The folder the user chose for a music or a video download. */
         suspend fun savedLocation(isMusic: Boolean): DownloadLocation =

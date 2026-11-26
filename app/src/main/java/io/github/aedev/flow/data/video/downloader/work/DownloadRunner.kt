@@ -189,7 +189,7 @@ class DownloadRunner
             val mimeType = if (request.wantsAudioOnly) "audio/mp4" else "video/mp4"
             downloadDao.completeItem(itemId, path, placed.fileName, extension, mimeType, quality, size)
             cover?.let { DownloadCovers.save(context, request.videoId, it) }?.let { downloadDao.updateThumbnailPath(request.videoId, it) }
-            if (!DownloadFiles.isDocument(path)) downloads.scanFile(path, mimeType)
+            if (!request.appOnly && !DownloadFiles.isDocument(path)) downloads.scanFile(path, mimeType)
             downloads.emitProgress(DownloadProgressUpdate(request.videoId, itemId, size, size, DownloadItemStatus.COMPLETED))
             notifier.show(request.videoId, request.tags.title, DownloadPhase.Complete(placed.fellBackTo, swappedTrack))
             staging.clear()

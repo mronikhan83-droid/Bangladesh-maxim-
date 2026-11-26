@@ -127,6 +127,7 @@ internal fun ShortsReelPlaybackEffects(
                 viewModel.recordShortProgress(short, position, pageState.duration)
                 viewModel.recordShortAbandoned(short, position, pageState.duration)
             }
+            if (isActive) viewModel.onShortLeft(short, position, pageState.duration, sessionState.hasRecordedWatched)
         }
     }
 

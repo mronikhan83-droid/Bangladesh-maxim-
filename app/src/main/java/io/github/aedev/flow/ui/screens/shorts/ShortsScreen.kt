@@ -83,6 +83,7 @@ fun ShortsScreen(
     val playerPreferences = remember(context) { PlayerPreferences(context) }
     val reelSettings = rememberShortsReelSettings(playerPreferences)
     val uiState by viewModel.uiState.collectAsState()
+    val offlineCount by viewModel.offlineCount.collectAsState()
     val scope = rememberCoroutineScope()
     val shareVideo = rememberVideoShareAction()
 
@@ -359,6 +360,9 @@ fun ShortsScreen(
             showBackButton = source != ShortsQueueSource.Feed,
             onBack = onBack,
             modifier = Modifier.align(Alignment.TopCenter),
+            offlineVisible = offlineCount > 0 || uiState.isOffline,
+            offlineActive = uiState.isOffline,
+            onToggleOffline = { if (uiState.isOffline) viewModel.backToFeed() else viewModel.watchOffline() },
         )
 
         if (isInPip) return@BoxWithConstraints

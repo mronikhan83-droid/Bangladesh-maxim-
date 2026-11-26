@@ -95,6 +95,10 @@ class ShortsQueueLoaderFactory
                     SavedShortsLoader(playlistRepository)
                 }
 
+                ShortsQueueSource.Offline -> {
+                    OfflineShortsLoader(offlineShorts)
+                }
+
                 is ShortsQueueSource.Subscriptions -> {
                     SubscriptionShortsLoader(
                         subscriptionFeedRepository = subscriptionFeedRepository,

@@ -489,6 +489,10 @@ class PlayerPreferences(
         val DOWNLOAD_THREADS = device(intPreferencesKey("download_threads"))
         val CONCURRENT_DOWNLOADS = device(intPreferencesKey("concurrent_downloads"))
         val DOWNLOAD_OVER_WIFI_ONLY = device(booleanPreferencesKey("download_over_wifi_only"))
+        val OFFLINE_VIDEOS_TARGET = device(intPreferencesKey("offline_videos_target"))
+        val OFFLINE_WATCHED_IDS = device(stringSetPreferencesKey("offline_watched_ids"))
+        val OFFLINE_AUTO_DOWNLOAD = device(booleanPreferencesKey("offline_auto_download"))
+        val OFFLINE_KEEP_WATCHED = device(booleanPreferencesKey("offline_keep_watched"))
         val DEFAULT_DOWNLOAD_QUALITY = device(stringPreferencesKey("default_download_quality"))
         val DEFAULT_DOWNLOAD_CODEC = device(stringPreferencesKey("default_download_codec"))
         val MUSIC_DOWNLOAD_QUALITY = device(stringPreferencesKey("music_download_quality"))
@@ -4686,6 +4690,59 @@ class PlayerPreferences(
         context.devicePreferencesDataStore.edit { preferences ->
             preferences[DeviceKeys.DOWNLOAD_OVER_WIFI_ONLY] = enabled
         }
+    }
+
+    /** How many Shorts Offline videos keeps on the device: 20, 50 or 100. */
+    val offlineVideosTarget: Flow<Int> =
+        context.devicePreferencesDataStore.data
+            .map { preferences ->
+                preferences[DeviceKeys.OFFLINE_VIDEOS_TARGET] ?: 50
+            }
+
+    suspend fun setOfflineVideosTarget(count: Int) {
+        context.devicePreferencesDataStore.edit { preferences ->
+            preferences[DeviceKeys.OFFLINE_VIDEOS_TARGET] = count
+        }
+    }
+
+    /** Downloaded Shorts watched in the offline feed since the last rotation. */
+    val offlineWatchedIds: Flow<Set<String>> =
+        context.devicePreferencesDataStore.data
+            .map { preferences ->
+                preferences[DeviceKeys.OFFLINE_WATCHED_IDS] ?: emptySet()
+            }
+
+    suspend fun setOfflineWatchedIds(ids: Set<String>) {
+        context.devicePreferencesDataStore.edit { preferences ->
+            preferences[DeviceKeys.OFFLINE_WATCHED_IDS] = ids
+        }
+    }
+
+    /** Whether Offline videos downloads a new set by itself. On unless the person turns it off. */
+    val offlineAutoDownload: Flow<Boolean> =
+        context.devicePreferencesDataStore.data
+            .map { preferences ->
+                preferences[DeviceKeys.OFFLINE_AUTO_DOWNLOAD] ?: true
+            }
+
+    suspend fun setOfflineAutoDownload(enabled: Boolean) {
+        context.devicePreferencesDataStore.edit { preferences ->
+            preferences[DeviceKeys.OFFLINE_AUTO_DOWNLOAD] = enabled
+        }
+    }
+
+    /** Whether watched offline Shorts stay on the device instead of being deleted. Off by default. */
+    val offlineKeepWatched: Flow<Boolean> =
+        context.devicePreferencesDataStore.data
+            .map { preferences ->
+                preferences[DeviceKeys.OFFLINE_KEEP_WATCHED] ?: false
+            }
+
+    suspend fun setOfflineKeepWatched(enabled: Boolean) {
+        context.devicePreferencesDataStore.edit { preferences ->
+            preferences[DeviceKeys.OFFLINE_KEEP_WATCHED] = enabled
+        }
+    }
     }
 
     val defaultDownloadQuality: Flow<VideoQuality> =

@@ -43,6 +43,11 @@ sealed interface ShortsQueueSource {
         override fun encode(): String = if (startVideoId.isBlank()) SUBSCRIPTIONS else "$SUBSCRIPTIONS:$startVideoId"
     }
 
+    /** The Shorts downloaded to this device, newest first. Never touches the network. */
+    data object Offline : ShortsQueueSource {
+        override fun encode(): String = OFFLINE
+    }
+
     /** An in-memory list handed over by a shelf. */
     data class Snapshot(
         val token: String,
@@ -57,6 +62,7 @@ sealed interface ShortsQueueSource {
         private const val CHANNEL = "channel"
         private const val SUBSCRIPTIONS = "subs"
         private const val SNAPSHOT = "snap"
+        private const val OFFLINE = "offline"
 
         /**
          * Parses what [encode] produced. Anything unrecognised — including a stale or truncated
@@ -76,6 +82,10 @@ sealed interface ShortsQueueSource {
 
                 SAVED -> {
                     Saved(rest)
+                }
+
+                OFFLINE -> {
+                    Offline
                 }
 
                 SUBSCRIPTIONS -> {
@@ -120,7 +130,7 @@ val ShortsQueueSource.openAtVideoId: String?
             is ShortsQueueSource.Snapshot -> this.startVideoId.takeIf { it.isNotBlank() }
             is ShortsQueueSource.Saved -> this.startVideoId.takeIf { it.isNotBlank() }
             is ShortsQueueSource.Subscriptions -> this.startVideoId.takeIf { it.isNotBlank() }
-            ShortsQueueSource.Feed -> null
+            ShortsQueueSource.Feed, ShortsQueueSource.Offline -> null
         }
 
 /**
@@ -141,7 +151,11 @@ val ShortsQueueSource.continuesIntoFeed: Boolean
             is ShortsQueueSource.Subscriptions,
             -> true
 
-            ShortsQueueSource.Feed, is ShortsQueueSource.Saved, is ShortsQueueSource.SeededFeed -> false
+            ShortsQueueSource.Feed,
+            ShortsQueueSource.Offline,
+            is ShortsQueueSource.Saved,
+            is ShortsQueueSource.SeededFeed,
+            -> false
         }
 
 /**
@@ -158,5 +172,6 @@ val ShortsQueueSource.isAlgorithmicFeed: Boolean
             is ShortsQueueSource.Channel,
             is ShortsQueueSource.Saved,
             is ShortsQueueSource.Subscriptions,
+            ShortsQueueSource.Offline,
             -> false
         }

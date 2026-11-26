@@ -1,11 +1,14 @@
 package io.github.aedev.flow.ui.screens.settings.downloads
 
+import android.content.Context
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.data.offline.OfflineFillResult
+import io.github.aedev.flow.data.offline.OfflineRefillWorker
 import io.github.aedev.flow.data.offline.OfflineShortsRepository
 import io.github.aedev.flow.data.video.downloader.work.DownloadController
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +33,8 @@ sealed interface OfflineNotice {
 
     data object NoCandidates : OfflineNotice
 
+    data object LowStorage : OfflineNotice
+
     data class Cleared(
         val count: Int,
     ) : OfflineNotice
@@ -42,6 +47,8 @@ data class OfflineVideosUiState(
     val thumbnails: List<String> = emptyList(),
     val queued: Int = 0,
     val selected: Int = DEFAULT_OFFLINE_TARGET,
+    val autoDownload: Boolean = true,
+    val keepWatched: Boolean = false,
     val busy: Boolean = false,
     val notice: OfflineNotice? = null,
 )
@@ -50,6 +57,7 @@ data class OfflineVideosUiState(
 class OfflineVideosViewModel
     @Inject
     constructor(
+        @ApplicationContext private val context: Context,
         private val offline: OfflineShortsRepository,
         private val preferences: PlayerPreferences,
         private val downloadController: DownloadController,
@@ -62,6 +70,15 @@ class OfflineVideosViewModel
 
         init {
             viewModelScope.launch {
+                preferences.offlineVideosTarget.collect { target -> _state.update { it.copy(selected = target) } }
+            }
+            viewModelScope.launch {
+                preferences.offlineAutoDownload.collect { on -> _state.update { it.copy(autoDownload = on) } }
+            }
+            viewModelScope.launch {
+                preferences.offlineKeepWatched.collect { on -> _state.update { it.copy(keepWatched = on) } }
+            }
+            viewModelScope.launch {
                 // Every download that starts or finishes changes the queue, so this also keeps the count live.
                 offline.queueSize().collect { size ->
                     _state.update { it.copy(queued = size) }
@@ -70,13 +87,26 @@ class OfflineVideosViewModel
             }
         }
 
-        fun select(count: Int) = _state.update { it.copy(selected = count) }
+        fun select(count: Int) {
+            viewModelScope.launch { preferences.setOfflineVideosTarget(count) }
+        }
 
         fun setWifiOnly(value: Boolean) {
             viewModelScope.launch {
                 preferences.setDownloadOverWifiOnly(value)
                 downloadController.applyNetworkPolicy()
             }
+        }
+
+        fun setAutoDownload(value: Boolean) {
+            viewModelScope.launch {
+                preferences.setOfflineAutoDownload(value)
+                if (value) OfflineRefillWorker.schedule(context) else OfflineRefillWorker.cancel(context)
+            }
+        }
+
+        fun setKeepWatched(value: Boolean) {
+            viewModelScope.launch { preferences.setOfflineKeepWatched(value) }
         }
 
         fun download() {
@@ -89,8 +119,11 @@ class OfflineVideosViewModel
                         OfflineFillResult.QUEUED -> OfflineNotice.Started(fill.queued)
                         OfflineFillResult.NOTHING_NEEDED -> OfflineNotice.NothingNeeded
                         OfflineFillResult.NO_CANDIDATES -> OfflineNotice.NoCandidates
+                        OfflineFillResult.LOW_STORAGE -> OfflineNotice.LowStorage
                     }
                 _state.update { it.copy(busy = false, notice = notice) }
+                // The first download also starts the daily top-up, so there is nothing to switch on.
+                if (fill.result == OfflineFillResult.QUEUED) OfflineRefillWorker.schedule(context)
                 refreshStats()
             }
         }

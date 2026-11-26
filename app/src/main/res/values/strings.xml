@@ -5455,4 +5455,13 @@
     <string name="offline_videos_watching">You\'re watching offline videos</string>
     <string name="offline_videos_close">Close</string>
     <string name="offline_videos_back">Back</string>
+    <string name="offline_videos_low_storage">Not enough free space. Free up at least 500 MB first.</string>
+    <string name="offline_videos_open_feed">Watch offline videos</string>
+    <string name="offline_videos_back_to_feed">Back to the online feed</string>
+    <string name="offline_videos_auto_note">When you have watched them all, they are deleted and a new set downloads by itself.</string>
+    <string name="offline_videos_auto_download">Auto-download</string>
+    <string name="offline_videos_auto_download_hint">Downloads a new set by itself once you have watched them all.</string>
+    <string name="offline_videos_keep_watched">Keep watched videos</string>
+    <string name="offline_videos_keep_watched_hint">Nothing is deleted after you watch it.</string>
+    <string name="offline_videos_private_note">These videos stay inside the app. They do not appear in your Gallery.</string>
 </resources>

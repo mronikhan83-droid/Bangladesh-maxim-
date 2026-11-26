@@ -54,6 +54,9 @@ class DownloadPlacement
                         trackNumber = request.tags.trackNumber.takeIf { collection?.kind?.isMusic == true },
                         trackTotal = request.tags.trackTotal,
                     )
+                if (request.appOnly) {
+                    placeInDirectory(staged, downloads.appOnlyDirectory(), collection = null, name = name)?.let { return@withLock it }
+                }
                 val tree = destination.exportTreeUri
                 val placed =
                     if (tree != null) {

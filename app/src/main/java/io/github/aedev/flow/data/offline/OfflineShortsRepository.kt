@@ -1,6 +1,9 @@
 package io.github.aedev.flow.data.offline
 
+import android.os.Environment
+import android.os.StatFs
 import io.github.aedev.flow.data.local.LikedVideosRepository
+import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.data.local.PlaylistRepository
 import io.github.aedev.flow.data.local.VideoHistoryEntry
 import io.github.aedev.flow.data.local.ViewHistory
@@ -19,6 +22,7 @@ import io.github.aedev.flow.data.video.downloader.work.EnqueueOutcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -32,7 +36,7 @@ data class OfflineShortsStats(
     val thumbnails: List<String>,
 )
 
-enum class OfflineFillResult { QUEUED, NOTHING_NEEDED, NO_CANDIDATES }
+enum class OfflineFillResult { QUEUED, NOTHING_NEEDED, NO_CANDIDATES, LOW_STORAGE }
 
 data class OfflineFill(
     val result: OfflineFillResult,
@@ -58,6 +62,7 @@ class OfflineShortsRepository
         private val viewHistory: ViewHistory,
         private val playlistRepository: PlaylistRepository,
         private val shortsFeed: ShortsFeedRepository,
+        private val preferences: PlayerPreferences,
     ) {
         suspend fun stats(): OfflineShortsStats =
             withContext(Dispatchers.IO) {
@@ -75,6 +80,12 @@ class OfflineShortsRepository
 
         /** How many downloads are waiting or running, so the sheet can show that work is going on. */
         fun queueSize(): Flow<Int> = downloadDao.observeQueue().map { it.size }
+
+        /** How many finished Shorts are on the device, for the offline toggle on the Shorts screen. */
+        fun downloadedCount(): Flow<Int> =
+            queueSize()
+                .map { completedShorts().size }
+                .distinctUntilChanged()
 
         /** The finished Shorts whose file is still on disk, newest download first. */
         suspend fun downloadedShorts(): List<ShortVideo> =
@@ -98,13 +109,44 @@ class OfflineShortsRepository
                     }
                 val need = target - have
                 if (need <= 0) return@withContext OfflineFill(OfflineFillResult.NOTHING_NEEDED)
+                if (freeBytes() < LOW_STORAGE_BYTES) return@withContext OfflineFill(OfflineFillResult.LOW_STORAGE)
 
                 val picks = pick(need, known)
                 var queued = 0
                 picks.forEach { short ->
-                    if (downloadController.enqueue(short.toVideo().toDownloadRequest()) == EnqueueOutcome.QUEUED) queued++
+                    if (downloadController.enqueue(short.toVideo().toDownloadRequest().copy(appOnly = true)) == EnqueueOutcome.QUEUED) queued++
                 }
                 OfflineFill(if (queued > 0) OfflineFillResult.QUEUED else OfflineFillResult.NO_CANDIDATES, queued)
+            }
+
+        /** Deletes one finished Short download, and only that: a regular video or a song stays. */
+        suspend fun remove(videoId: String): Boolean =
+            withContext(Dispatchers.IO) {
+                val row = downloadDao.getDownloadWithItems(videoId) ?: return@withContext false
+                val isFinishedShort = row.download.kind == DownloadKind.SHORT && row.overallStatus == DownloadItemStatus.COMPLETED
+                if (!isFinishedShort) return@withContext false
+                downloads.deleteDownload(videoId)
+                true
+            }
+
+        /**
+         * A downloaded Short was watched through in the offline feed. Nothing happens while the person
+         * keeps watched videos. Otherwise, once every Short on the device
+         * has been watched, or as many as the person asked to keep, they are all deleted. Returns
+         * true when that happened, so the caller can queue the next set.
+         */
+        suspend fun onWatched(videoId: String): Boolean =
+            withContext(Dispatchers.IO) {
+                if (preferences.offlineKeepWatched.first()) return@withContext false
+                val onDevice = completedShorts().map { it.download.videoId }.toSet()
+                if (videoId !in onDevice) return@withContext false
+                val watched = (preferences.offlineWatchedIds.first() + videoId) intersect onDevice
+                preferences.setOfflineWatchedIds(watched)
+                val target = preferences.offlineVideosTarget.first()
+                if (watched.size < minOf(target, onDevice.size)) return@withContext false
+                watched.forEach { remove(it) }
+                preferences.setOfflineWatchedIds(emptySet())
+                true
             }
 
         /** Deletes every finished Short download. Returns how many were removed. */
@@ -204,6 +246,13 @@ class OfflineShortsRepository
                 emptyList()
             }
 
+        private fun freeBytes(): Long =
+            try {
+                StatFs(Environment.getDataDirectory().path).availableBytes
+            } catch (e: IllegalArgumentException) {
+                Long.MAX_VALUE
+            }
+
         private fun VideoHistoryEntry.watchedToTheEnd(): Boolean = duration > 0 && position * 100 >= duration * FINISHED_PERCENT
 
         private companion object {
@@ -212,6 +261,7 @@ class OfflineShortsRepository
             const val HISTORY_SCAN = 400
             const val MAX_FEED_PAGES = 12
             const val FINISHED_PERCENT = 80
+            const val LOW_STORAGE_BYTES = 500L * 1024 * 1024
             val HAVE_OR_COMING =
                 setOf(DownloadItemStatus.COMPLETED, DownloadItemStatus.PENDING, DownloadItemStatus.DOWNLOADING)
         }

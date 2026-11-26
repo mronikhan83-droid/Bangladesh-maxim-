@@ -32,6 +32,8 @@ data class DownloadRequest(
     val subtitle: DownloadSubtitle? = null,
     /** Where that file was written, so deleting the download removes it too. */
     val subtitleFile: String? = null,
+    /** Kept inside the app: not in the Downloads folder, not shown by the Gallery or other apps. */
+    val appOnly: Boolean = false,
 ) {
     val videoId: String get() = tags.videoId
     val kind: DownloadKind get() = tags.kind

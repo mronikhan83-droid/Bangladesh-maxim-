@@ -18,6 +18,8 @@ import io.github.aedev.flow.data.local.PlaylistRepository
 import io.github.aedev.flow.data.model.Comment
 import io.github.aedev.flow.data.model.ShortVideo
 import io.github.aedev.flow.data.model.toVideo
+import io.github.aedev.flow.data.offline.OfflineRefillWorker
+import io.github.aedev.flow.data.offline.OfflineShortsRepository
 import io.github.aedev.flow.data.recommendation.BlockedChannelNames
 import io.github.aedev.flow.data.recommendation.FlowNeuroEngine
 import io.github.aedev.flow.data.recommendation.InteractionType
@@ -30,6 +32,7 @@ import io.github.aedev.flow.data.shorts.ShortsFeedRepository
 import io.github.aedev.flow.data.shorts.ShortsMetadataRepository
 import io.github.aedev.flow.data.shorts.ShortsStreamResolver
 import io.github.aedev.flow.data.shorts.ShortsWatchHistory
+import io.github.aedev.flow.data.shorts.isShortComplete
 import io.github.aedev.flow.data.shorts.queue.ShortsQueueChange
 import io.github.aedev.flow.data.shorts.queue.ShortsQueueController
 import io.github.aedev.flow.data.shorts.queue.ShortsQueueLoaderFactory
@@ -47,11 +50,14 @@ import io.github.aedev.flow.utils.LoadErrorKind
 import io.github.aedev.flow.utils.NetworkState
 import io.github.aedev.flow.utils.PerformanceDispatcher
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
@@ -73,9 +79,16 @@ class ShortsViewModel
         private val videoStats: VideoStatsRecorder,
         private val blockedNames: BlockedChannelNames,
         private val downloads: VideoDownloadManager,
+        private val offlineShorts: OfflineShortsRepository,
     ) : ViewModel() {
         private val _uiState = MutableStateFlow(ShortsUiState())
         val uiState: StateFlow<ShortsUiState> = _uiState.asStateFlow()
+
+        /** How many Shorts are downloaded, so the top bar knows whether to offer the offline feed. */
+        val offlineCount: StateFlow<Int> =
+            offlineShorts
+                .downloadedCount()
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), 0)
 
         private var queue: ShortsQueueController? = null
         private var loadedSource: ShortsQueueSource? = null
@@ -180,7 +193,9 @@ class ShortsViewModel
                         _uiState.value =
                             _uiState.value.copy(
                                 isLoading = false,
-                                isOffline = !NetworkState.isOnline(context) && controller.items.value.isNotEmpty(),
+                                isOffline =
+                                    resolved is ShortsQueueSource.Offline ||
+                                        (!NetworkState.isOnline(context) && controller.items.value.isNotEmpty()),
                             )
                         publishQueue()
 
@@ -200,6 +215,32 @@ class ShortsViewModel
                             )
                     }
                 }
+        }
+
+        /** Swaps the queue for the downloaded Shorts, with or without a connection. */
+        fun watchOffline() = load(ShortsQueueSource.Offline)
+
+        fun backToFeed() = load(ShortsQueueSource.Feed)
+
+        /**
+         * A page was left. In the offline feed a Short that was watched through is counted, and once
+         * the whole set has been watched it is deleted and the next set is queued, with no switch to
+         * flip. Outside the offline feed nothing is counted or deleted: a Short that plays from its
+         * file there may be one the person saved on purpose.
+         */
+        fun onShortLeft(
+            short: ShortVideo,
+            positionMs: Long,
+            durationMs: Long,
+            watchedToEnd: Boolean,
+        ) {
+            if (!(watchedToEnd || isShortComplete(positionMs, durationMs))) return
+            if (loadedSource != ShortsQueueSource.Offline && !_uiState.value.isOffline) return
+            viewModelScope.launch(Dispatchers.IO) {
+                if (offlineShorts.onWatched(short.id)) {
+                    OfflineRefillWorker.refillSoon(context, playerPreferences.downloadOverWifiOnly.first())
+                }
+            }
         }
 
         fun retry(source: ShortsQueueSource) {
